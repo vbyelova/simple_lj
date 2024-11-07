@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1728901777 source:/localhome/home/py19vb/PhD-Hange/Year_1/C/polymer_C/unfolding_bell_model/main.c
+	<stdio.h>
+	<math.h>
+	<stdlib.h>
+
