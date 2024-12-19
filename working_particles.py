@@ -13,16 +13,16 @@ from numpy import random
 
 
 dt = 0.01  # timestep
-num_par = 50  # number of particles
+num_par = 30  # number of particles
 boxlength = 20
 
 eq_time = 0.1
-time = 10
+time = 0.1
 mass = 1
 radius = 0.5  # this is our lengthscale
 l_0 = 2 * radius  # equilibrium bond length
 sigma = 2  # cutoff distance for interactions. keep this pretty small
-epsilon = 0  # around 5, units of kT
+epsilon = 1  # around 5, units of kT
 k_bond = 5
 bonds = []
 
@@ -101,7 +101,7 @@ def lj_force(i, j):
     if r2 > sigma**2:
         return np.array([0, 0])
     rij = np.sqrt(r2)
-    # print(rij)
+    #print(rij)
     vec_sep = np.array([rx, ry])
 
     if rij > 0.5 * boxlength:
@@ -111,20 +111,20 @@ def lj_force(i, j):
     rhat = vec_sep / (np.abs(rij))
 
     if r2 <= sigma**2:
-        return (
+        magnitude = (
             48
             * epsilon
             * (sigma**-1)
             * (((sigma / rij) ** 13) - 0.5 * ((sigma / rij) ** 7))
-            * rhat
         )
+        direction = rhat
+        #print(magnitude)
+        return magnitude * rhat
 
 
 def lj_energy(i, j):
     """Returns the Lennard-Jones energy experience due to short-range particle interactions."""
-    rx, ry, r2 = (
-        (distance_calc(i, j))[0],
-        (distance_calc(i, j))[1],
+    r2 = (
         (distance_calc(i, j))[2],
     )
     rij = np.sqrt(r2)
@@ -138,13 +138,15 @@ def make_step(i, j, t):
     lj = lj_force(i, j)
     b = bond_force(i, j)
     f = np.add(lj, b)
-    # print("old force: ", f)
+    #print("old force: ", f)
     if t < eq_time:
-        if f[0].any() > 200 or f[0].any() <= -200:
-            f[0] = (f[0] / (np.abs(f[0]))) * 150
-        elif f[1].any() >= 200 or f[1].any() <= -200:
-            f[1] = (f[1] / (np.abs(f[1]))) * 150
-    # print("corrected force: ", f[0], f[1])
+        #print("time working", t)
+        if np.linalg.norm(f) > 200:
+            f = (f / (np.linalg.norm(f))) * 150
+        #    print("working")
+        #elif f[1].any() >= 200 or f[1].any() <= -200:
+        #    f[1] = (f[1] / (np.abs(f[1]))) * 150
+    #print("corrected force: ", f[0], f[1])
     i.vx = i.vx - f[0] * dt
     i.x = i.x + i.vx * dt
     i.vy = i.vy - f[1] * dt
@@ -188,9 +190,7 @@ def stick(i, j):
 
 def bond_energy(i, j):
     """Calculates the energy of a bond between two particles."""
-    rx, ry, r2 = (
-        (distance_calc(i, j))[0],
-        (distance_calc(i, j))[1],
+    r2 = (
         (distance_calc(i, j))[2],
     )
     rij = np.sqrt(r2)
@@ -255,7 +255,7 @@ def simulate():
 
                 # graph(p1,p2,t)
 
-                t += dt
+        t += dt
 
     total_energy = np.array(total_energy, dtype="object")
     data = np.array(data)
@@ -268,6 +268,6 @@ def simulate():
     return print(len(bonds), "bonds"), plt.show()
 
 
-file_check()
+#file_check()
 simulate()
 # os.system("ffmpeg -f image2 -r 5 -i ./plots/graph_%d.png ./video/test1.mp4")
