@@ -3,6 +3,7 @@ Upon this bond breaking, the polymer will be able to unfold.
 
 Written by Victoria Byelova under the supervision of Dr. David Head and Prof. Lorna Dougan."""
 
+import os
 import numpy as np
 from numpy import random
 import matplotlib.pyplot as plt
@@ -10,7 +11,7 @@ import matplotlib.pyplot as plt
 #sim parameters
 boxlength = 10
 dt = 0.01
-eq_time = 0.1
+eq_time = 0.5
 time = 10
 bonds = []
 energy_barrier = 0.1
@@ -22,11 +23,11 @@ r = 1
 
 #spring parameters
 l_0 = 2 * r
-k_bond = 10
+k_bond = 15
 
 #lj parameters
 sigma = 3 #cutoff distance for interactions
-epsilon = 0 #units of kT
+epsilon = 1 #units of kT
 
 class Bead:
     info = """A bead representing part of a polymer. Arbitrary values are
@@ -46,6 +47,29 @@ class Bead:
         """returns kinetic energy of the bead."""
         return 0.5 * mass * (self.vx ** 2 + self.vy ** 2)
 
+
+def file_check():
+    """Checks if directories for video/snapshot storage exist, and makes them if not."""
+    if os.path.isdir("./three_bead_plots/"):
+        pass
+    else:
+        os.mkdir("./three_bead_plots/")
+
+    if os.path.isdir("./three_bead_video/"):
+        pass
+    else:
+        os.mkdir("./three_bead_video/")
+    return
+
+def graph(i, j, t):
+    """Plots a graph and saves a snapshot to a folder to then be made into an mp4."""
+
+    plt.axis([-0.5 * boxlength, 0.5 * boxlength, -0.5 * boxlength, 0.5 * boxlength])
+    plt.plot(i.x, i.y, marker=".")
+    plt.plot(j.x, j.y, marker=".")
+    plt.savefig("./three_bead_plots/graph_%d.png" % t)
+
+    return
 
 def distance_calc(i, j):
     #taken from working particles
@@ -154,9 +178,9 @@ def bond_force(i, j):
     return -1 * k_bond * (rij - l_0) * rhat
 
 def make_step(i, j, t):
-    print("calculating lj")
+    #print("calculating lj")
     lj = lj_force(i, j)
-    print("calculating bond force")
+    #print("calculating bond force")
     sb = bond_force(i, j)
     f = np.add(lj, sb)
     if t < eq_time:
@@ -164,9 +188,9 @@ def make_step(i, j, t):
             if np.linalg.norm(f) > 200:
                 f = (f / (np.linalg.norm(f))) * 150
     if [i, j] not in bonds:
-        print("checking bond whilst calculating force")
+        #print("checking bond whilst calculating force")
         if i.hasnotbeenbroken and j.hasnotbeenbroken == 0:
-            print("adding bell model force")
+            #print("adding bell model force")
             bm = bell_model(i, j, f)
             f = np.add(f, bm)
     else:
@@ -206,24 +230,22 @@ def bell_model(i, j, f):
 def simulate():
     global distance_store
     data = []
-    energy = []
-    total_energy = []
     t = 0
-    plt.figure()
 
-    print("making beads")
+    #print("making beads")
     beads = [Bead() for _ in range(num_beads)]
     beads[0].x, beads[0].y = 0, 0
     beads[1].x, beads[1].y = 1, 1
     beads[2].x, beads[2].y = -1, 1
+    b3 = beads[2]
 
     while t < time:
         for num, b1 in enumerate(beads):
             for b2 in beads[num + 1 :]:
                 distance_store = np.array(distance_calc(b1, b2))
-                print("making step")
+                #print("making step")
                 make_step(b1, b2, t)
-                print("checking new bond")
+                #print("checking new bond")
                 new_bond = stick(b1, b2)
                 if isinstance(new_bond, list):
                     if new_bond not in bonds:
@@ -238,15 +260,16 @@ def simulate():
                             b2.hasnotbeenbroken = 0
 
                 data.append([b1.x, b1.y, b2.x, b2.y])
-                plt.scatter(b1.x, b1.y, marker = ".")
-                plt.scatter(b2.x, b2.y, marker = ".")
+                #plt.scatter(b1.x, b1.y, marker = ".")
+                #plt.scatter(b2.x, b2.y, marker = ".")
 
+                graph(b1, b2, t)
+        plt.clf()       
         t += dt
 
     print(len(bonds), "bonds")
-    plt.xlabel("time")
-    plt.ylabel("position")
-    plt.show()                  
+    #traj_fig.show()                  
 
-
+#file_check()
 simulate()
+# os.system("ffmpeg -f image2 -r 5 -i ./three_bead_plots/graph_%d.png ./three_bead_video/test1.mp4")
