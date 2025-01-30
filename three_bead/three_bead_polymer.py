@@ -3,16 +3,16 @@ Upon this bond breaking, the polymer will be able to unfold.
 
 Written by Victoria Byelova under the supervision of Dr. David Head and Prof. Lorna Dougan."""
 
-import os
+import os, sys, pygame
 import numpy as np
 from numpy import random
 import matplotlib.pyplot as plt
 
 #sim parameters
-boxlength = 10
+boxlength = 50
 dt = 0.01
 eq_time = 0.5
-time = 10
+time = 5
 bonds = []
 energy_barrier = 0.1
 
@@ -23,11 +23,13 @@ r = 1
 
 #spring parameters
 l_0 = 2 * r
-k_bond = 15
+k_bond = 5
 
 #lj parameters
-sigma = 3 #cutoff distance for interactions
+sigma = 2 #cutoff distance for interactions
 epsilon = 1 #units of kT
+
+image =pygame.image.load("redsphere.png")
 
 class Bead:
     info = """A bead representing part of a polymer. Arbitrary values are
@@ -37,11 +39,12 @@ class Bead:
     bondindex = "empty"
     def __init__(self):
         self.mass = mass
-        self.r = r
-        self.x = 0
-        self.y = 0
-        self.vx = 0.1#random.normal(loc=0, scale=0.75, size=(1, 1))
-        self.vy = 0.1#random.normal(loc=0, scale=0.75, size=(1, 1))
+        self.vx = random.normal(loc=0, scale=0.75, size=(1, 1))
+        self.vy = random.normal(loc=0, scale=0.75, size=(1, 1))
+        self.x = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
+        self.y = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
+        self.image = image
+        self.pos = image.get_rect(center=(self.x, self.y))
     
     def ke(self):
         """returns kinetic energy of the bead."""
@@ -61,15 +64,6 @@ def file_check():
         os.mkdir("./three_bead_video/")
     return
 
-def graph(i, j, t):
-    """Plots a graph and saves a snapshot to a folder to then be made into an mp4."""
-
-    plt.axis([-0.5 * boxlength, 0.5 * boxlength, -0.5 * boxlength, 0.5 * boxlength])
-    plt.plot(i.x, i.y, marker=".")
-    plt.plot(j.x, j.y, marker=".")
-    plt.savefig("./three_bead_plots/graph_%d.png" % t)
-
-    return
 
 def distance_calc(i, j):
     #taken from working particles
@@ -225,7 +219,35 @@ def bell_model(i, j, f):
     rhat = vec_sep / (np.abs(rij))
     return rate_constant * dt * rhat
     
+def graph(beads, t):
+    """Plots a graph and saves a snapshot to a folder to then be made into an mp4."""
 
+    plt.axis([-0.5 * boxlength, 0.5 * boxlength, -0.5 * boxlength, 0.5 * boxlength])
+    for bead in beads:
+        plt.plot(bead.x, bead.y, marker=".")
+    plt.savefig("./three_bead_plots/graph_%d.png" % t)
+
+    return
+
+def visualise(particles, data, boxlength):
+    pygame.init()
+    data_row = 0
+    clock = pygame.time.Clock()
+
+    screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))
+    while True:
+        #for event in pygame.event.get():
+        #    if event.type == pygame.QUIT:
+        #        sys.exit()
+        screen.fill((255,255,255))
+#        if data_row <= len(particles):
+        for p1 in particles:
+            screen.blit(p1.image, ((data[data_row]) + ( 0.4*boxlength)) * 20)
+            data_row += 1
+            if data_row < len(particles):
+                pass
+        pygame.display.update() 
+        clock.tick(60)
 
 def simulate():
     global distance_store
@@ -237,7 +259,6 @@ def simulate():
     beads[0].x, beads[0].y = 0, 0
     beads[1].x, beads[1].y = 1, 1
     beads[2].x, beads[2].y = -1, 1
-    b3 = beads[2]
 
     while t < time:
         for num, b1 in enumerate(beads):
@@ -259,17 +280,18 @@ def simulate():
                             b1.hasnotbeenbroken = 0
                             b2.hasnotbeenbroken = 0
 
-                data.append([b1.x, b1.y, b2.x, b2.y])
+                data.append([b1.x, b1.y])
                 #plt.scatter(b1.x, b1.y, marker = ".")
-                #plt.scatter(b2.x, b2.y, marker = ".")
-
-                graph(b1, b2, t)
-        plt.clf()       
+        
+        #graph(beads, t)
+        #plt.clf()       
         t += dt
-
     print(len(bonds), "bonds")
+    data = np.array(data)
+    visualise(beads, data, boxlength)
+    #print(data)
     #traj_fig.show()                  
 
-#file_check()
+file_check()
 simulate()
 # os.system("ffmpeg -f image2 -r 5 -i ./three_bead_plots/graph_%d.png ./three_bead_video/test1.mp4")

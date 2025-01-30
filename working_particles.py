@@ -3,29 +3,27 @@ vdw attraction and bond via springs.
 
 Made by Victoria Byelova with the supervision of Dr David Head and Prof. Lorna Dougan."""
 
-import os
-
+import os, sys, pygame
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import random
 
-# matplotlib.use("Agg")
-
 
 dt = 0.01  # timestep
-num_par = 30  # number of particles
+num_par = 5  # number of particles
 boxlength = 20
 
-eq_time = 0.1
-time = 0.1
+eq_time = 3
+time = 3
 mass = 1
 radius = 0.5  # this is our lengthscale
 l_0 = 2 * radius  # equilibrium bond length
 sigma = 2  # cutoff distance for interactions. keep this pretty small
-epsilon = 1  # around 5, units of kT
-k_bond = 5
+epsilon = 2  # around 5, units of kT
+k_bond = 15
 bonds = []
 
+image = pygame.image.load("redsphere.png")
 
 class Particle:
     info = """A sphere that has kinetic energy and can experience Lennard-Jones 
@@ -38,7 +36,8 @@ class Particle:
         self.vy = random.normal(loc=0, scale=0.75, size=(1, 1))
         self.x = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
         self.y = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
-
+        self.image = image
+        self.pos = image.get_rect(center=(self.x,self.y))
         """self.vx = vx
         self.vy = vy
         self.x = x
@@ -143,6 +142,7 @@ def make_step(i, j, t):
         #print("time working", t)
         if np.linalg.norm(f) > 200:
             f = (f / (np.linalg.norm(f))) * 150
+            print(f, t)
         #    print("working")
         #elif f[1].any() >= 200 or f[1].any() <= -200:
         #    f[1] = (f[1] / (np.abs(f[1]))) * 150
@@ -157,16 +157,19 @@ def make_step(i, j, t):
     j.vy = j.vy + f[1] * dt
     j.y = j.y + j.vy * dt
 
+    i.pos = i.x, i.y
+    j.pos = j.x, j.y
+
     return
 
 
-def graph(i, j, t):
+def graph(beads, t):
     """Plots a graph and saves a snapshot to a folder to then be made into an mp4."""
 
     plt.axis([-0.5 * boxlength, 0.5 * boxlength, -0.5 * boxlength, 0.5 * boxlength])
-    plt.plot(i.x, i.y, marker=".")
-    plt.plot(j.x, j.y, marker=".")
-    plt.savefig("./plots/graph_%d.png" % t)
+    for bead in beads:
+        plt.plot(bead.x, bead.y, marker=".")
+    plt.savefig("./three_bead_plots/graph_%d.png" % t)
 
     return
 
@@ -212,60 +215,74 @@ def bond_force(i, j):
     rhat = vec_sep / (np.abs(rij))
     return -1 * k_bond * (rij - l_0) * rhat
 
+def visualise(particles, data, boxlength):
+    pygame.init()
+    data_row = 0
+    clock = pygame.time.Clock()
+
+    screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))
+    while True:
+        #for event in pygame.event.get():
+        #    if event.type == pygame.QUIT:
+        #        sys.exit()
+        screen.fill((255,255,255))
+
+        while data_row <  len(data):
+            for p1 in particles:
+                screen.blit(p1.image, ((data[data_row])))# + (0.4*boxlength)) * 20)
+                data_row += 1
+        pygame.display.update() 
+        clock.tick(30)
 
 def simulate():
     """Generates particles and calculates their new position according to the
     force experienced. Plots the coordinates."""
     particles = []  # Particles will be made and added to this list.
-    data = []  # The coordinates and velocity of the particle will be added here.
+     
     energy = []
     total_energy = []
+    data_row = 0
+
     t = 0  # time counter
     particles = [Particle() for _ in range(num_par)]  # makes a list of particles
-    # particles.append(Particle(-0.5,0,1,0))
-    # particles.append(Particle(0.5,0,-1,0))
+    data = np.zeros((int((time/dt) * (num_par + 1)), 2))
+    #data = np.zeros(shape=(len(particles), 1)) # The coordinates and velocity of the particle will be added here.
+    #particles.append(Particle(-5,0,1,0))
+    #particles.append(Particle(5,0,-1,0))
 
     plt.subplots(2, 1, figsize=(5, 10))
     plt.subplot(2, 1, 1)
     plt.xlabel("x position")
     plt.ylabel("y position")
-
     global distance_store
     while t < time:
         for num, p1 in enumerate(particles):
             for p2 in particles[num + 1 :]:
 
                 distance_store = np.array(distance_calc(p1, p2))
-
                 make_step(p1, p2, t)
                 new_bond = stick(p1, p2)
                 if isinstance(new_bond, list):
                     if new_bond not in bonds:
                         bonds.append(new_bond)
                     energy.append(bond_energy(p1, p2))
-
                 energy.append(lj_energy(p1, p2))
-                energy.append(p1.ke())
-                energy.append(p2.ke())
+                energy.append(p1.ke())            
                 total_energy.append([t, sum(energy)])
                 energy.clear()
-                data.append([p1.x, p1.y, p2.x, p2.y])
-                plt.scatter(p1.x, p1.y, marker=".")
-                plt.scatter(p2.x, p2.y, marker=".")
-
-                # graph(p1,p2,t)
-
+            plt.scatter(p1.x, p1.y, marker=".")
+            data[data_row] = [p1.x, p1.y]
+            data_row += 1
         t += dt
-
+    #graph(particles, t)
     total_energy = np.array(total_energy, dtype="object")
-    data = np.array(data)
-
+    print(len(bonds), "bonds")
     plt.subplot(2, 1, 2)
     plt.xlabel("time")
     plt.ylabel("energy")
     plt.plot(total_energy[:, 0], total_energy[:, 1])
-
-    return print(len(bonds), "bonds"), plt.show()
+    visualise(particles, data, boxlength)
+    return print(len(bonds), "bonds")#, plt.show()
 
 
 #file_check()
