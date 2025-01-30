@@ -3,24 +3,24 @@ vdw attraction and bond via springs.
 
 Made by Victoria Byelova with the supervision of Dr David Head and Prof. Lorna Dougan."""
 
-import os, sys, pygame
+import os, sys, pygame, math
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy import random
 
 
 dt = 0.01  # timestep
-num_par = 5  # number of particles
-boxlength = 20
+num_par = 10  # number of particles
+boxlength = 50
 
-eq_time = 3
-time = 3
+eq_time = 0.1
+time = 2
 mass = 1
-radius = 0.5  # this is our lengthscale
+radius = 1  # this is our lengthscale
 l_0 = 2 * radius  # equilibrium bond length
 sigma = 2  # cutoff distance for interactions. keep this pretty small
-epsilon = 2  # around 5, units of kT
-k_bond = 15
+epsilon = 1  # around 5, units of kT
+k_bond = 5
 bonds = []
 
 image = pygame.image.load("redsphere.png")
@@ -217,20 +217,17 @@ def bond_force(i, j):
 
 def visualise(particles, data, boxlength):
     pygame.init()
-    data_row = 0
     clock = pygame.time.Clock()
-
+    data_row = 0
     screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))
     while True:
         #for event in pygame.event.get():
         #    if event.type == pygame.QUIT:
         #        sys.exit()
         screen.fill((255,255,255))
-
-        while data_row <  len(data):
-            for p1 in particles:
-                screen.blit(p1.image, ((data[data_row])))# + (0.4*boxlength)) * 20)
-                data_row += 1
+        for p1 in particles:
+            screen.blit(p1.image, (((data[data_row]) + (0.4*boxlength)) * 20))
+            data_row += 1
         pygame.display.update() 
         clock.tick(30)
 
@@ -245,7 +242,7 @@ def simulate():
 
     t = 0  # time counter
     particles = [Particle() for _ in range(num_par)]  # makes a list of particles
-    data = np.zeros((int((time/dt) * (num_par + 1)), 2))
+    data = np.zeros((int((time/dt) * (num_par)), 2))
     #data = np.zeros(shape=(len(particles), 1)) # The coordinates and velocity of the particle will be added here.
     #particles.append(Particle(-5,0,1,0))
     #particles.append(Particle(5,0,-1,0))
@@ -270,17 +267,20 @@ def simulate():
                 energy.append(p1.ke())            
                 total_energy.append([t, sum(energy)])
                 energy.clear()
-            plt.scatter(p1.x, p1.y, marker=".")
-            data[data_row] = [p1.x, p1.y]
-            data_row += 1
+            plt.scatter(p1.x, p1.y, marker=".")         #keep in num, p1 loop
+            data[data_row] = [p1.x, p1.y]               #keep in num, p1 loop
+            data_row += 1                               #keep in num, p1 loop
         t += dt
+        print(t)
     #graph(particles, t)
     total_energy = np.array(total_energy, dtype="object")
     print(len(bonds), "bonds")
+    print(data)
     plt.subplot(2, 1, 2)
     plt.xlabel("time")
     plt.ylabel("energy")
     plt.plot(total_energy[:, 0], total_energy[:, 1])
+    print(len(data))
     visualise(particles, data, boxlength)
     return print(len(bonds), "bonds")#, plt.show()
 
