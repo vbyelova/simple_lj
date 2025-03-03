@@ -1,5 +1,5 @@
 """A Python code to simulate the trajectories of particles in a box. The particles experience short-range
-vdw attraction and bond via springs. 
+lj interactions.
 
 Made by Victoria Byelova with the supervision of Dr David Head and Prof. Lorna Dougan."""
 
@@ -11,7 +11,7 @@ from numpy import random
 
 dt = 0.01  # timestep
 num_par = 10  # number of particles
-boxlength = 50
+boxlength = 30
 
 eq_time = 0.1
 time = 2
@@ -19,16 +19,16 @@ mass = 1
 radius = 1  # this is our lengthscale
 l_0 = 2 * radius  # equilibrium bond length
 sigma = 2  # cutoff distance for interactions. keep this pretty small
-epsilon = 1  # around 5, units of kT
-k_bond = 5
-bonds = []
+epsilon = 5  # around 5, units of kT
+k_bond = 50
 
 image = pygame.image.load("redsphere.png")
 
-class Particle:
+class Particle():
     info = """A sphere that has kinetic energy and can experience Lennard-Jones 
     interactions with other particles. If multiple particles are made, the velocity distribution is
-    normalised. The particle coordinates are also randomised."""
+    normalised. The particle coordinates are also randomised. Each particle has an image and rect for
+    pygame."""
 
     def __init__(self):  # velocity components, coordinates, radius
         """initialise"""
@@ -36,15 +36,25 @@ class Particle:
         self.vy = random.normal(loc=0, scale=0.75, size=(1, 1))
         self.x = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
         self.y = random.uniform(-0.5 * boxlength, 0.5 * boxlength)
+#        self.vx = vx
+#        self.vy = vy
+#        self.x = x
+#        self.y = y
         self.image = image
-        self.pos = image.get_rect(center=(self.x,self.y))
-        """self.vx = vx
-        self.vy = vy
-        self.x = x
-        self.y = y"""
+
+        self.rect = image.get_rect(center = (self.x, self.y))
 
     def ke(self):
+        """Returns kinetic energy of particle."""
         return 0.5 * mass * (self.vx**2 + self.vy**2)
+    
+    def update(self,coords, row_num, column_num):
+        """A coordinate updating function for use in pygame. Stored coordinates from the simulation are
+        passed back to the particle so the positions can be updated in real time."""
+        self.x = (coords[row_num, column_num] + 0.3 * boxlength) * 10
+        self.y = (coords[row_num, column_num + 1] + 0.3 * boxlength) * 10
+
+
 
 
 def file_check():
@@ -64,17 +74,21 @@ def file_check():
 def distance_calc(i, j):
     """A function to calculate the separation between two particles. In the main code,
     this is used to make a data array that all of the functions can access and calculations are made just once.
+    Boundary check is performed to find the shortest interaction distance.
     """
-    rx = j.x - i.x
-    ry = j.y - i.y
-    r2 = rx**2 + ry**2
-    return [rx, ry, r2]
+
+    rx = float(j.x - i.x)
+    ry = float(j.y - i.y)
+    boundary_check(rx, ry)
+    r2 = float(rx**2 + ry**2)
+    rij = float(np.sqrt(r2))
+    return rx, ry, r2, rij
 
 
 def boundary_check(rx, ry):
     """Checks if a particle's coordinates are outside the boundary conditions.
-    If so, the position is corrected."""
-    rx, ry = float(rx), float(ry)
+    If so, the position is corrected. In some cases, the boundary conditions are used to wrap the interaction 
+    around the box instead of through. In other instances, the particle coordinates are changed."""
     if rx >= 0.5 * boxlength:
         rx -= boxlength
     elif rx <= -0.5 * boxlength:
@@ -87,21 +101,23 @@ def boundary_check(rx, ry):
     return rx, ry
 
 
-def lj_force(i, j):
+def lj_force(i, j, distance_store):
     """Finds the separation between two particles, checks if the particles are
     within PBD and finds shortest separation. If separation is above the
     cut-off, no force is returned. Otherwise, the force due to LJ interaction
     is returned for the x-direction and the y-direction."""
-
-    i.x, i.y = boundary_check(i.x, i.y)
-    j.x, j.y = boundary_check(j.x, j.y)
+    #print("lj force")
     rx, ry, r2 = distance_store[0], distance_store[1], distance_store[2]
-    rx, ry = boundary_check(rx, ry)
+#    i.x, i.y = boundary_check(i.x, i.y, distance_store)
+#    j.x, j.y = boundary_check(j.x, j.y, distance_store)
+#    rx, ry = boundary_check(rx, ry, distance_store)
+    
     if r2 > sigma**2:
-        return np.array([0, 0])
-    rij = np.sqrt(r2)
+        return [0, 0]
+    rij = distance_store[3]
     #print(rij)
-    vec_sep = np.array([rx, ry])
+    vec_sep = [rx, ry]
+
 
     if rij > 0.5 * boxlength:
         rij = boxlength - rij
@@ -116,33 +132,34 @@ def lj_force(i, j):
             * (sigma**-1)
             * (((sigma / rij) ** 13) - 0.5 * ((sigma / rij) ** 7))
         )
-        direction = rhat
-        #print(magnitude)
         return magnitude * rhat
 
 
-def lj_energy(i, j):
-    """Returns the Lennard-Jones energy experience due to short-range particle interactions."""
-    r2 = (
-        (distance_calc(i, j))[2],
-    )
-    rij = np.sqrt(r2)
+def lj_energy(i, j, distance_store):
+    """Returns the Lennard-Jones energy due to short-range particle interactions."""
+    #print("lj energy")
+    rij = distance_store[3]
     return 4 * epsilon * (((sigma / rij) ** 12 - ((sigma / rij) ** 6)))
 
 
-def make_step(i, j, t):
+def make_step(i, j, t, bonds, distance_store):
     """Calculates the LJ force ands incorporates into Euler method to find new
-    velocities and coordinates. If the simulation is still in the equilibration time, a force ceiling is created to prevent explosions.
+    velocities and coordinates. If the simulation is still in the equilibration time, a force ceiling is
+     created to prevent explosions.
     """
-    lj = lj_force(i, j)
-    b = bond_force(i, j)
+    #print(i.vx, i.x, dt, "sanity check")
+
+    lj = lj_force(i, j, distance_store)
+    print("lj force:", lj)
+    #print(i.vx, i.x, dt, "sanity check after")
+    b = bond_force(i, j, bonds, distance_store)
     f = np.add(lj, b)
     #print("old force: ", f)
     if t < eq_time:
         #print("time working", t)
         if np.linalg.norm(f) > 200:
             f = (f / (np.linalg.norm(f))) * 150
-            print(f, t)
+        #    print(f, t)
         #    print("working")
         #elif f[1].any() >= 200 or f[1].any() <= -200:
         #    f[1] = (f[1] / (np.abs(f[1]))) * 150
@@ -156,10 +173,6 @@ def make_step(i, j, t):
     j.x = j.x + j.vx * dt
     j.vy = j.vy + f[1] * dt
     j.y = j.y + j.vy * dt
-
-    i.pos = i.x, i.y
-    j.pos = j.x, j.y
-
     return
 
 
@@ -174,114 +187,101 @@ def graph(beads, t):
     return
 
 
-def stick(i, j):
-    """Checks if particles are within the box boundaries. If so and the particles are close enough, the particles are appended to a list."""
-    i.x, i.y = boundary_check(i.x, i.y)
-    j.x, j.y = boundary_check(j.x, j.y)
-    rx, ry, r2 = (
-        (distance_calc(i, j))[0],
-        (distance_calc(i, j))[1],
-        (distance_calc(i, j))[2],
-    )
-    rx, ry = boundary_check(rx, ry)
-    rij = np.sqrt(r2)
-    if np.abs(rij) <= l_0:
-        return [i, j]
-    else:
-        return
+def stick(distance_store):
+    """Checks if the particle separation is within the LJ potential well. Returns """
+#    i.x, i.y = boundary_check(i.x, i.y, distance_store)
+#    j.x, j.y = boundary_check(j.x, j.y, distance_store)
+#    rx, ry = boundary_check(rx, ry, distance_store)
+    rij = distance_store[3]
+    if np.abs(rij) > l_0:
+        return 0
+    elif np.abs(rij) <= l_0:
+        return 1
 
 
-def bond_energy(i, j):
+def bond_energy(i, j, distance_store):
     """Calculates the energy of a bond between two particles."""
-    r2 = (
-        (distance_calc(i, j))[2],
-    )
-    rij = np.sqrt(r2)
+    #print("bond energy")
+    rij = distance_store[3]
     return 0.5 * k_bond * (rij - l_0) ** 2
 
 
-def bond_force(i, j):
+def bond_force(i, j, bonds, distance_store):
     """Checks if a bond between two particles exists on the bond list. If not, there is no bond force experienced.
     If so, the particle experiences a spring force from the bond."""
-    rx, ry, r2 = (
-        (distance_calc(i, j))[0],
-        (distance_calc(i, j))[1],
-        (distance_calc(i, j))[2],
-    )
+    #print("bond force")
+    rx, ry = distance_store[0], distance_store[1]
     if [i, j] not in bonds:
         return [0, 0]
-    rij = np.sqrt(r2)
-    vec_sep = np.array([rx, ry])
-    rhat = vec_sep / (np.abs(rij))
-    return -1 * k_bond * (rij - l_0) * rhat
+    else:
+        rij = distance_store[3]
+        vec_sep = [rx, ry]
+        rhat = vec_sep / (np.abs(rij))
+        magnitude = -1 * k_bond * (rij - l_0)
+        return magnitude * rhat
 
-def visualise(particles, data, boxlength):
+def visualise(particles, coords, bond_indices):
+    """Uses pygame library to visualise particle movement over course of simulation. Coordinates and bonded pair are 
+    extracted from simulation and drawn in pygame window."""
     pygame.init()
     clock = pygame.time.Clock()
-    data_row = 0
+    offset = 0.35 * boxlength
     screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))
-    while True:
-        #for event in pygame.event.get():
-        #    if event.type == pygame.QUIT:
-        #        sys.exit()
+    running =  True
+    row_num = 0
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
         screen.fill((255,255,255))
-        for p1 in particles:
-            screen.blit(p1.image, (((data[data_row]) + (0.4*boxlength)) * 20))
-            data_row += 1
-        pygame.display.update() 
+        column_num = 0
+        if row_num == coords.shape[0]:
+            running = False
+        else:
+            for p in particles:
+                p.update(coords, row_num, column_num)
+                screen.blit(image,(p.x, p.y))
+                column_num += 2
+            row_num += 1
+        pygame.display.flip()
         clock.tick(30)
+
+
 
 def simulate():
     """Generates particles and calculates their new position according to the
     force experienced. Plots the coordinates."""
     particles = []  # Particles will be made and added to this list.
-     
-    energy = []
-    total_energy = []
-    data_row = 0
-
     t = 0  # time counter
+    bonds = []
+    bond_indices = []
     particles = [Particle() for _ in range(num_par)]  # makes a list of particles
-    data = np.zeros((int((time/dt) * (num_par)), 2))
-    #data = np.zeros(shape=(len(particles), 1)) # The coordinates and velocity of the particle will be added here.
-    #particles.append(Particle(-5,0,1,0))
-    #particles.append(Particle(5,0,-1,0))
-
-    plt.subplots(2, 1, figsize=(5, 10))
-    plt.subplot(2, 1, 1)
-    plt.xlabel("x position")
-    plt.ylabel("y position")
-    global distance_store
+#    particles.append(Particle(-0.5,0,1,0))
+#    particles.append(Particle(0.5,0,-1,0))
+    coords = np.zeros((int(time/dt) + 1, 2 * len(particles)))
+    row_num = 0
     while t < time:
+        column_num = 0
         for num, p1 in enumerate(particles):
             for p2 in particles[num + 1 :]:
-
-                distance_store = np.array(distance_calc(p1, p2))
-                make_step(p1, p2, t)
-                new_bond = stick(p1, p2)
-                if isinstance(new_bond, list):
-                    if new_bond not in bonds:
-                        bonds.append(new_bond)
-                    energy.append(bond_energy(p1, p2))
-                energy.append(lj_energy(p1, p2))
-                energy.append(p1.ke())            
-                total_energy.append([t, sum(energy)])
-                energy.clear()
-            plt.scatter(p1.x, p1.y, marker=".")         #keep in num, p1 loop
-            data[data_row] = [p1.x, p1.y]               #keep in num, p1 loop
-            data_row += 1                               #keep in num, p1 loop
+                distance_store = distance_calc(p1, p2)
+                #print(particles[0].x, "before")    
+                make_step(p1, p2, t, bonds, distance_store)
+                new_bond = stick(distance_store)
+                #print(new_bond)
+                if new_bond == 1:
+                    if [p1,p2] not in bonds:
+                        bonds.append([p1, p2])
+                        bond_indices.append([row_num, p1, p2])
+            coords[row_num, column_num] = p1.x
+            coords[row_num, column_num+1] = p1.y
+            column_num += 2
+        for p in particles:
+            boundary_check(p.x, p.y)
         t += dt
-        print(t)
-    #graph(particles, t)
-    total_energy = np.array(total_energy, dtype="object")
-    print(len(bonds), "bonds")
-    print(data)
-    plt.subplot(2, 1, 2)
-    plt.xlabel("time")
-    plt.ylabel("energy")
-    plt.plot(total_energy[:, 0], total_energy[:, 1])
-    print(len(data))
-    visualise(particles, data, boxlength)
+        row_num += 1
+    print(coords)
+    visualise(particles, coords, bonds)
     return print(len(bonds), "bonds")#, plt.show()
 
 
