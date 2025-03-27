@@ -172,13 +172,13 @@ def make_step(i, j, t, bonds, distance_store):
     return
 
 
-def graph(beads, t):
+def graph(i, j, t):
     """Plots a graph and saves a snapshot to a folder to then be made into an mp4."""
 
     plt.axis([-0.5 * boxlength, 0.5 * boxlength, -0.5 * boxlength, 0.5 * boxlength])
-    for bead in beads:
-        plt.plot(bead.x, bead.y, marker=".")
-    plt.savefig("./three_bead_plots/graph_%d.png" % t)
+    plt.plot(i.x, i.y, marker=".")
+    plt.plot(j.x, j.y, marker=".")
+    plt.savefig("./plots/graph_%d.png" % t)
 
     return
 
