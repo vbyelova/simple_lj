@@ -7,21 +7,23 @@ Made by Victoria Byelova under the supervision of Dr David Head and Prof. Lorna 
 import os, sys, pygame, math
 import matplotlib.pyplot as plt
 import numpy as np
+from collections import defaultdict
 from numpy import random
 
 
 dt = 0.01                                       # timestep
-num_par = 20                                   # number of particles
+num_par = 30                                   # number of particles
 boxlength = 50                                  # length of one side of box
+energy_barrier = 0.1
+time = 3                                        # simulation time
 
-eq_time = 5                                     # equilibration time
-time = 10                                        # simulation time
+eq_time = time                                     # equilibration time
 mass = 1                                        # mass of a particle. should be unitary
 radius = 1                                      # this is our lengthscale
 l_0 = 2 * radius                                # equilibrium bond length
 sigma = 2.5                                     # cutoff distance for interactions. keep this pretty small
-epsilon = 3                                     # potential well, around 5, in units of kT
-k_bond = 50                                      # spring constant for bond
+epsilon = 5                                     # potential well, around 5, in units of kT
+k_bond = 5                                      # spring constant for bond
 
 image = pygame.image.load("redsphere.png")
 
@@ -41,7 +43,7 @@ class Particle():
 #        self.vy = vy
 #        self.x = x
 #        self.y = y
-        self.bonded_particles = {}                                  # dictionary for indexing bonds
+        self.bonded_particles = defaultdict(list)                                  # dictionary for indexing bonds
         self.image = image                                          # image object to visualise
         self.rect = image.get_rect(center = (self.x, self.y))       # assigns a space for visualisation
 
@@ -80,7 +82,7 @@ def distance_calc(i, j):
 
     rx = float(j.x - i.x)
     ry = float(j.y - i.y)
-    boundary_check(rx, ry)
+    rx, ry = boundary_check(rx, ry)
     r2 = float(rx**2 + ry**2)
     rij = float(np.sqrt(r2))
     return rx, ry, r2, rij
@@ -90,13 +92,13 @@ def boundary_check(rx, ry):
     """Checks if a particle's coordinates are outside the boundary conditions.
     If so, the position is corrected. In some cases, the boundary conditions are used to wrap the interaction 
     around the box instead of through. In other instances, the particle coordinates are changed."""
-    if rx >= 0.5 * boxlength:
+    while rx >= 0.5 * boxlength:
         rx -= boxlength
-    elif rx <= -0.5 * boxlength:
+    while rx <= -0.5 * boxlength:
         rx += boxlength
-    elif ry >= 0.5 * boxlength:
+    while ry >= 0.5 * boxlength:
         ry -= boxlength
-    elif ry <= -0.5 * boxlength:
+    while ry <= -0.5 * boxlength:
         ry += boxlength
 
     return rx, ry
@@ -114,22 +116,14 @@ def lj_force(i, j, distance_store):
         return [0, 0]
     rij = distance_store[3]
     #print(rij)
+
     vec_sep = [rx, ry]
 
-
-    if rij > 0.5 * boxlength:
-        rij = boxlength - rij
-    elif rij < -0.5 * boxlength:
-        rij = boxlength + rij
     rhat = vec_sep / (np.abs(rij))
 
     if r2 <= sigma**2:
-        magnitude = (
-            48
-            * epsilon
-            * (sigma**-1)
-            * (((sigma / rij) ** 13) - 0.5 * ((sigma / rij) ** 7))
-        )
+        magnitude = (48 * epsilon * (sigma**-1)
+            * (((sigma / rij) ** 13) - 0.5 * ((sigma / rij) ** 7)))
         return magnitude * rhat
 
 
@@ -156,8 +150,12 @@ def make_step(i, j, t, bonds, distance_store):
     if t < eq_time:
         #print("time working", t)
         if np.linalg.norm(f) > 200:
+            #print("bond force", b)
+            ##print("lj force", lj)
             f = (f / (np.linalg.norm(f))) * 150
-        #    print(f, t)
+            #print("I EXPLODED AT T = ", t)
+            #print(f, t)
+            #print("coordinates", i.x , i.y, j.x, j.y)
         #    print("working")
         #elif f[1].any() >= 200 or f[1].any() <= -200:
         #    f[1] = (f[1] / (np.abs(f[1]))) * 150
@@ -216,6 +214,24 @@ def bond_force(i, j, bonds, distance_store):
         rhat = vec_sep / (np.abs(rij))
         magnitude = -1 * k_bond * (rij - l_0)
         return magnitude * rhat
+    
+def bell_model(i, j, f):
+    attempt_freq = 0.7
+    k_bT = 1
+    transition_dx = 1
+    numerator = -1 * (energy_barrier - f * transition_dx)
+    denom = k_bT
+    exponent = numerator / denom
+    rate_constant = attempt_freq ** (exponent)
+    rx, ry, r2 = (
+        (distance_calc(i, j))[0],
+        (distance_calc(i, j))[1],
+        (distance_calc(i, j))[2],
+    )
+    rij = np.sqrt(r2)
+    vec_sep = np.array([rx, ry])
+    rhat = vec_sep / (np.abs(rij))
+    return rate_constant * dt * rhat
 
 def visualise(particles, coords):
     """Uses pygame library to visualise particle movement over course of simulation. Coordinates and bonded pair are 
@@ -224,7 +240,7 @@ def visualise(particles, coords):
     clock = pygame.time.Clock()                                         # creates object to track time
     offset =  70                                                        # shifts bonds to right position
     screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))  # sets up a visualisation space
-    modified_coords = (coords * 0.2 * boxlength) + 10 * boxlength                                # makes a new array of shifted coordinates
+    modified_coords = (coords * 0.2 * boxlength) + 10 * boxlength       # makes a new array of shifted coordinates
     running =  True
     row_num = 0                                                         # equivalent to timestep
     while running:
@@ -233,7 +249,6 @@ def visualise(particles, coords):
                 running = False                                         # means we can close the pygame window manually
         screen.fill((255,255,255))
         column_num = 0
-        bond_column_num = 0
         if row_num == modified_coords.shape[0]:                         # stops the visualisation if we run out of coords
             running = False
         else:
@@ -242,16 +257,24 @@ def visualise(particles, coords):
                 if row_num not in p.bonded_particles.keys():            # skips bond drawing if there are none during t
                     pass
                 else:
-                    for val in p.bonded_particles.values():             # draws lines for all bonds during t
-                        pygame.draw.line(screen, (0, 0, 0),
-                         (modified_coords[row_num, val * 2] + offset, 
-                          modified_coords[row_num, val * 2 + 1] + offset),
-                         (p.x + offset, p.y + offset))
+                    for val in p.bonded_particles[row_num]:             # draws lines for all bonds during t
+                        rx = p.x - modified_coords[row_num, val * 2]
+                        ry = p.y - modified_coords[row_num, val *2 + 1]
+                        boundary_lim = (0.2 * boxlength + 10 * boxlength) * 0.5
+                        if (rx >= boundary_lim or rx <= -1 * boundary_lim
+                        or ry >= boundary_lim  or ry <= -1 * boundary_lim):
+                            pass
+                        else:
+                            pygame.draw.line(screen, (0, 0, 0),
+                            (modified_coords[row_num, val * 2] + offset, 
+                            modified_coords[row_num, val * 2 + 1] + offset),
+                            (p.x + offset, p.y + offset))
                 screen.blit(image,(p.x, p.y))                           # draws particles
                 column_num += 2
             row_num += 1
         pygame.display.flip()                                           # updates all of the screen
         clock.tick(30)                                                  # visualises at 30 fps
+
 
 
 
@@ -264,6 +287,7 @@ def simulate():
     particles = [Particle() for _ in range(num_par)]                    # makes a list of particles
 #    particles.append(Particle(-5,0,5,0))                               # use for testing
 #    particles.append(Particle(5,0,-5,0))
+
     coords = np.zeros((int(time/dt) + 1, 2 * len(particles)))           # array for storing coordinates
     row_num = 0                                                         # each row in coords represents a timestep
     while t < time:
@@ -273,12 +297,13 @@ def simulate():
                 distance_store = distance_calc(p1, p2)                  # calculate separation of particles
                 #print(particles[0].x, "before")    
                 make_step(p1, p2, t, bonds, distance_store)             # calculates forces, modifies velocities and position
-                new_bond = stick(distance_store)                        # tests if particles are close enough to bond
-                #print(new_bond)
-                if new_bond == 1:
-                    p1.bonded_particles[row_num] = particles.index(p2)  # save index that points to coordinates of bonded particle
-                    if [p1,p2] not in bonds:
+                if [p1,p2] not in bonds:
+                    new_bond = stick(distance_store)                        # tests if particles are close enough to bond
+                    if new_bond == 1:
+                        print("new bond", particles.index(p1), particles.index(p2))
                         bonds.append([p1, p2])                          # keep track of how many bonds exists and which ones
+                if [p1,p2] in bonds:
+                    p1.bonded_particles[row_num].append(particles.index(p2))
             coords[row_num, column_num] = p1.x                          # each particle has two columns. one for x, one for y
             coords[row_num, column_num+1] = p1.y
             column_num += 2                                             # coordinates of this particle have been saved. move on to next
@@ -286,9 +311,9 @@ def simulate():
             boundary_check(p.x, p.y)                                    # put any stray particles back in the box
         t += dt
         row_num += 1                                                    # updates in sync with t, means each move at each t is saved
-
+    print(len(bonds), "bonds")  
     visualise(particles, coords)
-    return print(len(bonds), "bonds")#, plt.show()
+    return #, plt.show()
 
 
 #file_check()
