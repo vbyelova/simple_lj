@@ -12,7 +12,7 @@ from numpy import random
 
 dt = 0.01                                       # timestep
 num_par = 0                                   # number of particles
-boxlength = 50                                  # length of one side of box
+boxlength = 30                                # length of one side of box
 energy_barrier = 10
 time = 5                                        # simulation time
 
@@ -42,7 +42,7 @@ class Particle():
 #        self.vy = vy
 #        self.x = x
 #        self.y = y
-        self.bonded_particles = defaultdict(list)                                  # dictionary for indexing bonds
+        self.bonded_particles = defaultdict(list)                   # dictionary for indexing bonds
         self.image = image                                          # image object to visualise
         self.rect = image.get_rect(center = (self.x, self.y))       # assigns a space for visualisation
         self.hasbeenbroken = "no"
@@ -269,7 +269,7 @@ def visualise(particles, coords):
     pygame.init()
     clock = pygame.time.Clock()                                         # creates object to track time
     offset =  63                                                        # shifts bonds to right position
-    screen = pygame.display.set_mode((boxlength * 20, boxlength * 20))  # sets up a visualisation space
+    screen = pygame.display.set_mode((boxlength * 15, boxlength * 15))  # sets up a visualisation space
     modified_coords = (coords * 0.2 * boxlength) + 10 * boxlength       # makes a new array of shifted coordinates
     running =  True
     row_num = 0                                                         # equivalent to timestep
@@ -354,9 +354,8 @@ def simulate():
         row_num += 1                                                    # updates in sync with t, means each move at each t is saved
     print(len(bonds), "bonds")  
     visualise(particles, coords)
-    return #, plt.show()
+    return len(bonds)
 
-
-#file_check()
 simulate()
+#file_check()
 # os.system("ffmpeg -f image2 -r 5 -i ./plots/graph_%d.png ./video/test1.mp4")

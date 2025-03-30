@@ -14,7 +14,7 @@ from numpy import random
 dt = 0.01                                       # timestep
 num_par = 30                                   # number of particles
 boxlength = 50                                  # length of one side of box
-energy_barrier = 0.1
+energy_barrier = 0.133
 time = 3                                        # simulation time
 
 eq_time = time                                     # equilibration time
@@ -300,7 +300,7 @@ def simulate():
                 if [p1,p2] not in bonds:
                     new_bond = stick(distance_store)                        # tests if particles are close enough to bond
                     if new_bond == 1:
-                        print("new bond", particles.index(p1), particles.index(p2))
+                        #print("new bond", particles.index(p1), particles.index(p2))
                         bonds.append([p1, p2])                          # keep track of how many bonds exists and which ones
                 if [p1,p2] in bonds:
                     p1.bonded_particles[row_num].append(particles.index(p2))
@@ -311,11 +311,27 @@ def simulate():
             boundary_check(p.x, p.y)                                    # put any stray particles back in the box
         t += dt
         row_num += 1                                                    # updates in sync with t, means each move at each t is saved
-    print(len(bonds), "bonds")  
+#    print(len(bonds), "bonds")  
     visualise(particles, coords)
-    return #, plt.show()
+    return len(bonds) #, plt.show()
 
 
 #file_check()
 simulate()
 # os.system("ffmpeg -f image2 -r 5 -i ./plots/graph_%d.png ./video/test1.mp4")
+
+#bond_tracker = []
+#for i in range(0,3):
+#    sim = simulate()
+#    bond_tracker.append(sim)
+#    print(i)
+
+#count_up = {x:bond_tracker.count(x) for x in bond_tracker}
+#print(count_up)
+
+#fName =	"counted.dat" 
+
+#with open("counted.dat", "w") as f:
+#    print(count_up, file=f)
+
+
